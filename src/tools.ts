@@ -1170,7 +1170,7 @@ export function buildAgentTools(
     const sourceKeys = [...rctx.searchBySource.keys()];
     const multiSource = sourceKeys.length > 1;
     const baseDescription =
-      "Search the web and return a ranked, deduplicated result list with snippets, without fetching anything. `queries` runs up to 4 query variants in parallel and merges the rankings.";
+      "Search the web and return a ranked, deduplicated result list with snippets, without fetching anything. `queries` runs up to 4 query variants in parallel and merges the rankings. For time-sensitive facts, make at least one variant explicitly current by adding the present year or 'latest', and prefer the most recently published result.";
     const description = multiSource
       ? `${baseDescription}\n\nSet \`source\` to target a specialized index instead of the general web:\n` +
         sourceKeys
