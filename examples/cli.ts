@@ -394,8 +394,7 @@ function footer(result: ResearchResult, outcome: RunOutcome): string {
     return `${paint(GREEN, "✓")} done — ${footerStats(result)}`;
   }
   const note = outcome.note.trim();
-  const label =
-    outcome.status === "failed" ? "partial report" : "no usable report";
+  const label = outcome.status === "failed" ? "run failed" : "no usable report";
   return (
     `${paint(YELLOW, "✗")} ${label} — ${footerStats(result)}` +
     (note ? `\n  ${note}` : "")
