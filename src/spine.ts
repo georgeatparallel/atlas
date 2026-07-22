@@ -28,10 +28,10 @@ import {
 } from "./checklist.js";
 import { AtlasError, errorMessage } from "./errors.js";
 import type { AgentRole, Citation } from "./events.js";
-import type { ResearchDegenerate, ResearchFailure } from "./result.js";
 import { stubToolResultWindow } from "./memory.js";
 import { MODEL_CALL_MAX_RETRIES } from "./model.js";
 import { todayLine } from "./prompts.js";
+import type { ResearchDegenerate, ResearchFailure } from "./result.js";
 import { NON_EVIDENCE_WARNINGS } from "./sources.js";
 import type { RunCtx } from "./state.js";
 import {

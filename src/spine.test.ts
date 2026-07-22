@@ -593,7 +593,9 @@ describe("spine failure visibility", () => {
     expect(result.sources.length).toBeGreaterThan(0);
     expect(result.failure).toBeUndefined();
     expect(result.degenerate).toBeDefined();
-    expect(result.degenerate?.reason).toMatch(/no report composed within budget/i);
+    expect(result.degenerate?.reason).toMatch(
+      /no report composed within budget/i,
+    );
   });
 
   it("leaves a healthy run free of failure and degenerate flags", async () => {
