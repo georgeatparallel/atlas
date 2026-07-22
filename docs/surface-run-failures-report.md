@@ -13,7 +13,7 @@ Work on a fresh branch off `main` (this branch, `surface-run-failures-v2`). Dele
 Kills the silent-failure class. Smallest, highest-value, no type/API changes.
 
 **`src/spine.ts`** — at each swallow site, capture the non-abort error, emit it, and embed the real cause:
-- Add `errorMessage` to the existing `./errors.js` import (confirm `errorMessage` is exported there; if not, mirror `serve.ts`'s `messageOf` helper locally).
+- Add `errorMessage` to the existing `./errors.js` import (confirmed exported at `src/errors.ts:1`).
 - Gather catch (`~838-842`): on non-abort error, `rctx.emit({ type: "run.error", message: errorMessage(err), recoverable: true })`, write the cause to `process.stderr`, and keep a `gatherError` message.
 - Sibling catches — preSynthFill (`~859-861`), synthesis (`~869-873`), coverage/flush (`~889-891`): same recoverable `run.error` emission on non-abort error (preserve the existing abort re-throw conditions verbatim).
 - Zero-source fallback return (`~845-853`) and empty-draft fallback return (`~893-901`): prefix/replace the generic string with the captured cause so `report`/`note` carry the real reason. Keep main's return shape (`citations`, `unboundCitations`).
@@ -28,7 +28,7 @@ Kills the silent-failure class. Smallest, highest-value, no type/API changes.
 
 **`src/outcome.ts`** (new) — port the branch's final version: `classifyRunOutcome({ sources, note, failure? })` → `{ status, exitCode, note }`, `DEGENERATE_EXIT_CODE = 3`, `FAILED_EXIT_CODE = 1`. Structurally typed — no hard dep on `ResearchResult`.
 
-**`examples/cli.ts`** — import `classifyRunOutcome`; in `main()` after the run, `const outcome = classifyRunOutcome(result)`; print `footer` on `ok` else the cause line; set `process.exitCode = outcome.exitCode` when non-zero (do **not** switch the abort/paused `process.exit(130)` paths). Rewrite `footer()` (`~339-351`) to branch on `outcome.status` using **main's** `RunStats` fields (`costUSD`, `searches`, `citationsBound`/`citationsUnsupported`, `stopReason`, `durationMs`) — the branch's `claimsConfirmed/agentsSpawned` fields do not exist on main (`src/events.ts:18-34`).
+**`examples/cli.ts`** — import `classifyRunOutcome`; in `main()` after the run, `const outcome = classifyRunOutcome(result)`; print `footer` on `ok`, else print the cause line **plus** the stats footer (cost/duration matter most on runs that produced nothing); set `process.exitCode = outcome.exitCode` when non-zero (do **not** switch the abort/paused `process.exit(130)` paths). Rewrite `footer()` (`~339-351`) to branch on `outcome.status` using **main's** `RunStats` fields (`costUSD`, `searches`, `citationsBound`/`citationsUnsupported`, `stopReason`, `durationMs`) — the branch's `claimsConfirmed/agentsSpawned` fields do not exist on main (`src/events.ts:18-34`).
 
 **`examples/serve.ts`** — at startup (near `readEnv`/`new Atlas`, `~17`/`~199-201`), loop `detectProxyBaseURL()` and log `proxyBaseURLWarning(name)` to stderr for each set var.
 
@@ -38,12 +38,12 @@ Kills the silent-failure class. Smallest, highest-value, no type/API changes.
 
 Turns a zero-source **outage** (exit 1/failed) apart from a benign zero-source **result** (exit 3/degenerate).
 
-- **`src/spine.ts`** — add `failure?: ResearchFailure` to `SpineOutput` (`~44-51`); in the gather fallback set `failure: { phase: "gather", message }`, in the empty-draft fallback set `failure: { phase: "synthesis", message }`.
+- **`src/spine.ts`** — add `failure?: ResearchFailure` to `SpineOutput` (`~44-51`); in the gather fallback set `failure: { phase: "gather", message }` **only when a gather error was captured** (the branch spreads `...(gatherError ? { failure } : {})` — unconditional would misclassify every legitimately-zero-source run as failed); in the empty-draft fallback set `failure: { phase: "synthesis", message }` **only when a synthesis error was captured** (deviation from the branch, which sets it unconditionally — see Decisions).
 - **`src/run.ts`** — add `failure?: ResearchFailure` to `ResearchResult` (`~58`) and propagate `out.failure` into the assembled `result` (`~334`).
 - **`src/index.ts`** — export `ResearchFailure` (and `RunOutcome`/`classifyRunOutcome` if we want them public).
 - **`examples/cli.ts`** — `classifyRunOutcome` now reads `result.failure` → `FAILED_EXIT_CODE`; relabel recoverable `run.error` as `"warning:"` in the event renderer (`~266-269`).
 - **`examples/serve.page.html`** — mirror the recoverable→"warning" label in the SSE `run.error` handler.
-- **Tests** — extend `spine.test.ts`/`outcome.test.ts`: gather/synthesis outage sets `failure` and classifies `failed`/exit 1; zero-source-no-failure stays `degenerate`/exit 3.
+- **Tests** — extend `spine.test.ts`/`outcome.test.ts`: gather/synthesis outage sets `failure` and classifies `failed`/exit 1; zero-source-no-failure stays `degenerate`/exit 3; sources-gathered-but-empty-draft with no synthesis error (budget exhaustion) sets no `failure` and stays `degenerate`/exit 3.
 
 ## Reuse (don't reinvent)
 
@@ -57,6 +57,7 @@ Turns a zero-source **outage** (exit 1/failed) apart from a benign zero-source *
 
 - **Exit-code convention kept from the branch**: `0` ok, `3` degenerate (ran clean, no sources), `1` failed (real outage). The 3-vs-1 split is deliberate so scripts can tell "nothing found" from "it broke." Collapse both to `1` if preferred.
 - **Runs still complete** on recoverable failures — visibility is via event + stderr + note + exit code, not a thrown error. Matches main's existing recoverable/terminal `run.error` split.
+- **Deviation from the branch on empty-draft classification**: the branch sets `failure` unconditionally in the empty-draft fallback, so a draft that's empty purely from budget exhaustion (no synthesis error) exits 1 `failed` — conflating "budget too low" with a real outage. We set `failure` only when a synthesis error was captured; budget-exhausted empty drafts stay `degenerate`/exit 3.
 
 ## Verification
 
