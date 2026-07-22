@@ -28,6 +28,7 @@ import {
 } from "./checklist.js";
 import { AtlasError, errorMessage } from "./errors.js";
 import type { AgentRole, Citation } from "./events.js";
+import type { ResearchDegenerate, ResearchFailure } from "./result.js";
 import { stubToolResultWindow } from "./memory.js";
 import { MODEL_CALL_MAX_RETRIES } from "./model.js";
 import { todayLine } from "./prompts.js";
@@ -48,6 +49,8 @@ export interface SpineOutput {
   unboundCitations: string[];
   sources?: { url: string; title: string; via: string; chars?: number }[];
   warnings?: string[];
+  failure?: ResearchFailure;
+  degenerate?: ResearchDegenerate;
 }
 
 interface Gap {
@@ -865,6 +868,11 @@ export async function runSpine(
       note: failNote && note ? `${failNote}\n\n${note}` : failNote || note,
       citations: [],
       unboundCitations: [],
+      // A captured gather error is a real outage (failed); a clean run that
+      // simply found nothing to fetch is a degenerate result, not a failure.
+      ...(gatherError
+        ? { failure: { phase: "gather", message: failNote } }
+        : { degenerate: { reason: "no sources retrieved" } }),
     };
   }
 
@@ -944,6 +952,11 @@ export async function runSpine(
       note: failNote && note ? `${failNote}\n\n${note}` : failNote || note,
       citations: [],
       unboundCitations: [],
+      // A captured synthesis error is a real outage (failed); an empty draft
+      // from budget exhaustion with no error is degenerate, not a failure.
+      ...(synthError
+        ? { failure: { phase: "synthesis", message: failNote } }
+        : { degenerate: { reason: "no report composed within budget" } }),
     };
   }
   const grounded = renumberAndGround(rctx, stripProcessCaveats(draft.text));

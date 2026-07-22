@@ -304,7 +304,9 @@ function formatEvent(e: ResearchEvent): string | null {
     case "run.error":
       return paint(
         YELLOW,
-        `! ${e.recoverable ? "recoverable " : ""}error: ${e.message}`,
+        e.recoverable
+          ? `! warning: ${e.message}`
+          : `! error: ${e.message}`,
       );
     default:
       return null;
