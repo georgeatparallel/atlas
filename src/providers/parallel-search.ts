@@ -65,7 +65,10 @@ export function parallelSearch(
           }),
       });
       try {
-        await client.connect(transport, { signal: callSignal });
+        await client.connect(transport, {
+          signal: callSignal,
+          timeout: timeoutMs,
+        });
         const response = await client.callTool(
           {
             name: "web_search",
@@ -76,7 +79,7 @@ export function parallelSearch(
             },
           },
           undefined,
-          { signal: callSignal },
+          { signal: callSignal, timeout: timeoutMs },
         );
         const text = z
           .array(z.object({ type: z.string(), text: z.string().optional() }))
