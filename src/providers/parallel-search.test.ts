@@ -29,7 +29,13 @@ const data = {
 
 function mcpFixture(
   result: Record<string, unknown> = { structuredContent: data, content: [] },
-  options: { sse?: boolean; hang?: string; status?: number } = {},
+  options: {
+    sse?: boolean;
+    hang?: string;
+    status?: number;
+    hold?: Promise<void>;
+    onHold?: () => void;
+  } = {},
 ) {
   const requests: { rpc?: Rpc; init?: RequestInit }[] = [];
   vi.stubGlobal("fetch", async (input: unknown, init?: RequestInit) => {
@@ -42,6 +48,10 @@ function mcpFixture(
       ? JSON.parse(String(init.body))
       : undefined;
     requests.push({ rpc, init });
+    if (rpc?.method === "tools/call" && options.hold) {
+      options.onHold?.();
+      await options.hold;
+    }
     if (rpc?.method === options.hang) {
       await new Promise<never>((_, reject) => {
         const signal = init?.signal;
@@ -325,5 +335,40 @@ describe("parallel.search", () => {
     expect(
       requests.find((r) => r.rpc?.method === hang)?.init?.signal?.aborted,
     ).toBe(true);
+  });
+
+  it("allows a configured timeout longer than the MCP SDK default", async () => {
+    let release!: () => void;
+    let onHold!: () => void;
+    const hold = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const ready = new Promise<void>((resolve) => {
+      onHold = resolve;
+    });
+    mcpFixture(undefined, { hold, onHold });
+    vi.useFakeTimers();
+    try {
+      const pending = parallel
+        .search({ timeoutMs: 120_000 })
+        .search({ query: "q" });
+      let settled = false;
+      void pending.then(
+        () => {
+          settled = true;
+        },
+        () => {
+          settled = true;
+        },
+      );
+      await ready;
+      await vi.advanceTimersByTimeAsync(61_000);
+      expect(settled).toBe(false);
+      release();
+      expect(await pending).toHaveLength(2);
+    } finally {
+      release();
+      vi.useRealTimers();
+    }
   });
 });
