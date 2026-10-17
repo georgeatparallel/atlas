@@ -1,10 +1,11 @@
+import type { LanguageModelV3GenerateResult } from "@ai-sdk/provider";
 import { MockLanguageModelV3 } from "ai/test";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { runAgent } from "../agent.js";
 import { resolveRunConfig } from "../config.js";
 import { assembleRun } from "../context.js";
 import { EventHub } from "../event-hub.js";
 import { parallel } from "../index.js";
-import { execSearchTool } from "../tools.js";
 import { combineSearchProviders, defaultSearchProviders } from "./search.js";
 import { JournalWriter, memoryStore } from "./store.js";
 
@@ -158,8 +159,48 @@ describe("parallel.search", () => {
 
   it("feeds selected-provider results into Atlas search candidates and tool output", async () => {
     mcpFixture();
+    let turns = 0;
+    const model = new MockLanguageModelV3({
+      doGenerate: async ({
+        prompt,
+      }): Promise<LanguageModelV3GenerateResult> => {
+        const first = turns++ === 0;
+        if (!first) {
+          expect(JSON.stringify(prompt)).toContain(
+            "https://www.example.com/research",
+          );
+          expect(JSON.stringify(prompt)).toContain(
+            "First excerpt … Second excerpt",
+          );
+        }
+        return {
+          content: first
+            ? [
+                {
+                  type: "tool-call",
+                  toolCallId: "parallel-call",
+                  toolName: "search",
+                  input: JSON.stringify({
+                    queries: ["browser automation research"],
+                    limit: 1,
+                  }),
+                },
+              ]
+            : [{ type: "text", text: "Found the research page." }],
+          finishReason: {
+            unified: first ? "tool-calls" : "stop",
+            raw: undefined,
+          },
+          usage: {
+            inputTokens: { total: 1, noCache: 1, cacheRead: 0, cacheWrite: 0 },
+            outputTokens: { total: 1, text: 1, reasoning: 0 },
+          },
+          warnings: [],
+        };
+      },
+    });
     const config = {
-      model: new MockLanguageModelV3(),
+      model,
       search: parallel.search(),
     };
     const journal = new JournalWriter(memoryStore(), "parallel-test");
@@ -178,13 +219,18 @@ describe("parallel.search", () => {
     });
     try {
       expect(rctx.search.providers.map((p) => p.id)).toEqual(["parallel"]);
-      const output = await execSearchTool(
-        rctx,
-        ["browser automation research"],
-        1,
-      );
-      expect(output).toContain("https://www.example.com/research");
-      expect(output).toContain("First excerpt … Second excerpt");
+      const output = await runAgent(rctx, {
+        role: "research",
+        modelRole: "research",
+        task: "browser automation research",
+        system: "Search for a research page.",
+        tools: ["search"],
+        grant: rctx.meter,
+        depth: 0,
+        maxTurns: 2,
+      });
+      expect(output.note).toBe("Found the research page.");
+      expect(turns).toBe(2);
       expect(rctx.surfacedCandidates.size).toBe(1);
       expect(rctx.counters.searches).toBe(1);
     } finally {
